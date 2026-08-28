@@ -1,0 +1,48 @@
+{
+  "name": "kite-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+ "scripts": {
+  "dev": "concurrently -n \"server,agent\" -c \"cyan,magenta\" \"npm run server:dev\" \"npm run agent:dev\"",
+
+  "server:dev": "tsx watch src/index.ts",
+
+  "agent:dev": "tsx src/agent/main.ts dev",
+
+  "start": "concurrently -n \"server,agent\" -c \"cyan,magenta\" \"npm run start:server\" \"npm run start:agent\"",
+
+  "start:server": "node dist/index.js",
+
+  "start:agent": "node dist/agent/main.js start",
+
+  "build": "npm run build:frontend && tsc",
+
+  "build:frontend": "npm --prefix ../frontend run build && node scripts/copyfiles.mjs",
+
+  "bridge:dev": "tsx src/agent/bridge.ts",
+
+  "hardware:test": "tsx src/scripts/hardware-test.ts"
+},
+  "dependencies": {
+    "@livekit/agents": "^1.7.0",
+    "@livekit/agents-plugin-google": "^1.7.0",
+    "@livekit/agents-plugin-openai": "^1.7.0",
+    "@livekit/plugins-ai-coustics": "^0.3.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.2",
+    "livekit-client": "^2.22.0",
+    "livekit-server-sdk": "^2.18.0",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.17.0",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^10.0.5",
+    "tsx": "^4.23.12",
+    "typescript": "^5.7.0"
+  }
+}
