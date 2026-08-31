@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { WebSocketServer, type WebSocket } from "ws";
+import type { Server } from "node:http";
 import {
     isEsp32Ack,
     isEsp32Error,
@@ -65,8 +66,9 @@ function removeClient(socket: WebSocket) {
     clients.delete(socket);
 }
 
-export function startBridge(listenPort = port): WebSocketServer {
-    const server = new WebSocketServer({ port: listenPort });
+export function startBridge(listenPort = port, httpServer?: Server): WebSocketServer {
+    const wssOptions = httpServer ? { server: httpServer } : { port: listenPort };
+    const server = new WebSocketServer(wssOptions);
 
     server.on("connection", (socket) => {
         clients.set(socket, { role: "unknown" });
@@ -159,7 +161,12 @@ export function startBridge(listenPort = port): WebSocketServer {
     }, 10000);
 
     if (!configuredToken) console.warn("[ESP32] ESP32_DEVICE_TOKEN is not configured; bridge authentication is disabled for development.");
-    console.log(`[CLASSROOM] WebSocket bridge listening on ws://0.0.0.0:${listenPort}`);
+    
+    if (httpServer) {
+        console.log(`[CLASSROOM] WebSocket bridge attached to main HTTP server`);
+    } else {
+        console.log(`[CLASSROOM] WebSocket bridge listening on ws://0.0.0.0:${listenPort}`);
+    }
 
     return server;
 }

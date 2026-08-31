@@ -186,7 +186,7 @@ const server = app.listen(port, () => {
     );
 
     console.log(
-        `🔌 ESP32 Bridge: ws://0.0.0.0:${bridgePort}`
+        `🔌 ESP32 Bridge: Attached to main server on port ${port}`
     );
 
     console.log("=========================================");
@@ -198,9 +198,7 @@ const server = app.listen(port, () => {
 // ============================================================
 
 try {
-
-    startBridge(bridgePort);
-
+    startBridge(bridgePort, server);
 } catch (error) {
 
     console.warn(
