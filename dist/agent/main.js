@@ -35,6 +35,26 @@ function createLLM() {
         strictToolSchema: true,
     });
 }
+/* ============================================================
+   KITE TTS PROVIDER
+   ============================================================ */
+function createTTS() {
+    const provider = (process.env.KITE_TTS_PROVIDER || "openai").trim().toLowerCase();
+    if (provider === "openai" && (process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY)) {
+        console.log("[KITE] Using OpenAI TTS provider");
+        return new openai.TTS({
+            model: process.env.OPENAI_TTS_MODEL || "tts-1",
+            voice: process.env.KITE_TTS_VOICE || "nova",
+            apiKey: process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY,
+        });
+    }
+    const ttsModel = process.env.KITE_TTS_MODEL || "cartesia/sonic";
+    console.log(`[KITE] Using LiveKit Cloud Inference TTS model: ${ttsModel}`);
+    return new inference.TTS({
+        model: ttsModel,
+        voice: process.env.KITE_TTS_VOICE,
+    });
+}
 const CURRICULUM = {
     fruits: [
         "pineapple",
@@ -713,12 +733,7 @@ export default defineAgent({
                 language: "multi",
             }),
             llm: createLLM(),
-            tts: new inference.TTS({
-                model: "inworld/inworld-tts-2",
-                voice: process.env.KITE_TTS_VOICE ||
-                    "Priya",
-                language: "hi",
-            }),
+            tts: createTTS(),
             turnHandling: {
                 turnDetection: new inference.TurnDetector(),
             },

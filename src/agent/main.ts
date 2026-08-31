@@ -76,6 +76,32 @@ function createLLM() {
 
 
 /* ============================================================
+   KITE TTS PROVIDER
+   ============================================================ */
+
+function createTTS() {
+    const provider = (process.env.KITE_TTS_PROVIDER || "openai").trim().toLowerCase();
+
+    if (provider === "openai" && (process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY)) {
+        console.log("[KITE] Using OpenAI TTS provider");
+        return new openai.TTS({
+            model: (process.env.OPENAI_TTS_MODEL as any) || "tts-1",
+            voice: (process.env.KITE_TTS_VOICE as any) || "nova",
+            apiKey: process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY,
+        });
+    }
+
+    const ttsModel = process.env.KITE_TTS_MODEL || "cartesia/sonic";
+    console.log(`[KITE] Using LiveKit Cloud Inference TTS model: ${ttsModel}`);
+
+    return new inference.TTS({
+        model: ttsModel as any,
+        voice: process.env.KITE_TTS_VOICE,
+    });
+}
+
+
+/* ============================================================
    CURRICULUM
    ============================================================ */
 
@@ -936,16 +962,7 @@ export default defineAgent({
 
                 llm: createLLM(),
 
-                tts: new inference.TTS({
-                    model:
-                        "inworld/inworld-tts-2",
-
-                    voice:
-                        process.env.KITE_TTS_VOICE ||
-                        "Priya",
-
-                    language: "hi",
-                }),
+                tts: createTTS(),
 
                 turnHandling: {
                     turnDetection:
