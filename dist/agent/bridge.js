@@ -46,8 +46,9 @@ function removeClient(socket) {
     }
     clients.delete(socket);
 }
-export function startBridge(listenPort = port) {
-    const server = new WebSocketServer({ port: listenPort });
+export function startBridge(listenPort = port, httpServer) {
+    const wssOptions = httpServer ? { server: httpServer } : { port: listenPort };
+    const server = new WebSocketServer(wssOptions);
     server.on("connection", (socket) => {
         clients.set(socket, { role: "unknown" });
         send(socket, { type: "bridge_ready" });
@@ -134,7 +135,12 @@ export function startBridge(listenPort = port) {
     }, 10000);
     if (!configuredToken)
         console.warn("[ESP32] ESP32_DEVICE_TOKEN is not configured; bridge authentication is disabled for development.");
-    console.log(`[CLASSROOM] WebSocket bridge listening on ws://0.0.0.0:${listenPort}`);
+    if (httpServer) {
+        console.log(`[CLASSROOM] WebSocket bridge attached to main HTTP server`);
+    }
+    else {
+        console.log(`[CLASSROOM] WebSocket bridge listening on ws://0.0.0.0:${listenPort}`);
+    }
     return server;
 }
 export function isDeviceConnected() {

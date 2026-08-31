@@ -119,14 +119,14 @@ const server = app.listen(port, () => {
     console.log(`🤖 Chat: http://localhost:${port}/api/chat`);
     console.log(`🎙️ LiveKit: http://localhost:${port}/api/livekit/token`);
     console.log(`🏫 Classroom: http://localhost:${port}/api/classroom/curriculum`);
-    console.log(`🔌 ESP32 Bridge: ws://0.0.0.0:${bridgePort}`);
+    console.log(`🔌 ESP32 Bridge: Attached to main server on port ${port}`);
     console.log("=========================================");
 });
 // ============================================================
 // START ESP32 WEBSOCKET BRIDGE
 // ============================================================
 try {
-    startBridge(bridgePort);
+    startBridge(bridgePort, server);
 }
 catch (error) {
     console.warn(`[BRIDGE] Could not auto-start bridge on port ${bridgePort}:`, error);
