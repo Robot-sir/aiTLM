@@ -1,7 +1,8 @@
 import WebSocket from "ws";
 import { isHardwareCommand } from "./hardware-protocol.js";
 import { isClassroomItem } from "./curriculum.js";
-const DEFAULT_BRIDGE_URL = "ws://127.0.0.1:8787";
+const port = process.env.PORT || process.env.CLASSROOM_BRIDGE_PORT || 8787;
+const DEFAULT_BRIDGE_URL = `ws://127.0.0.1:${port}`;
 const COMMAND_TIMEOUT_MS = 3000;
 export async function sendToEsp32(command) {
     if (!isHardwareCommand(command))

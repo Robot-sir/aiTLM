@@ -2,7 +2,8 @@ import WebSocket from "ws";
 import { isHardwareCommand, type HardwareCommand } from "./hardware-protocol.js";
 import { isClassroomItem, type ClassroomCategory } from "./curriculum.js";
 
-const DEFAULT_BRIDGE_URL = "ws://127.0.0.1:8787";
+const port = process.env.PORT || process.env.CLASSROOM_BRIDGE_PORT || 8787;
+const DEFAULT_BRIDGE_URL = `ws://127.0.0.1:${port}`;
 const COMMAND_TIMEOUT_MS = 3000;
 
 type BridgeResult = { type: "command_result"; ok: boolean; message?: string };
