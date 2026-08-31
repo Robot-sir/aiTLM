@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { isHardwareCommand, type HardwareCommand } from "./hardware-protocol.js";
 import { isClassroomItem, type ClassroomCategory } from "./curriculum.js";
+import { sendCommandToActiveDevice } from "./bridge.js";
 
 const port = process.env.PORT || process.env.CLASSROOM_BRIDGE_PORT || 8787;
 const DEFAULT_BRIDGE_URL = `ws://127.0.0.1:${port}`;
@@ -10,6 +11,15 @@ type BridgeResult = { type: "command_result"; ok: boolean; message?: string };
 
 export async function sendToEsp32(command: HardwareCommand): Promise<void> {
     if (!isHardwareCommand(command)) throw new Error("Invalid classroom hardware command.");
+
+    // Direct in-process execution via active WebSocket bridge connection
+    const inProcessResult = await sendCommandToActiveDevice(command);
+    if (inProcessResult.ok) {
+        return;
+    }
+    if (inProcessResult.message && inProcessResult.message !== "Classroom device is offline.") {
+        throw new Error(inProcessResult.message);
+    }
 
     const bridgeUrl = process.env.CLASSROOM_BRIDGE_URL || DEFAULT_BRIDGE_URL;
     const token = process.env.ESP32_DEVICE_TOKEN || "";

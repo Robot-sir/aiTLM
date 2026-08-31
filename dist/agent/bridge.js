@@ -25,7 +25,12 @@ function completeCommand(requestId, ok, message) {
         return;
     clearTimeout(pending.timer);
     pendingCommands.delete(requestId);
-    send(pending.requester, { type: "command_result", ok, message });
+    if (pending.resolve) {
+        pending.resolve({ ok, message });
+    }
+    if (pending.requester) {
+        send(pending.requester, { type: "command_result", ok, message });
+    }
 }
 function sendCommandToEsp32(command, requester) {
     if (!activeDevice || activeDevice.readyState !== activeDevice.OPEN) {
@@ -37,6 +42,22 @@ function sendCommandToEsp32(command, requester) {
     pendingCommands.set(requestId, { requester, timer });
     send(activeDevice, { ...command, requestId });
     console.log(`[ESP32] command=${command.type} requestId=${requestId} status=sent`);
+}
+export function sendCommandToActiveDevice(command) {
+    const device = activeDevice;
+    if (!device || device.readyState !== device.OPEN) {
+        return Promise.resolve({ ok: false, message: "Classroom device is offline." });
+    }
+    return new Promise((resolve) => {
+        const requestId = randomUUID();
+        const timer = setTimeout(() => {
+            pendingCommands.delete(requestId);
+            resolve({ ok: false, message: "Classroom device did not acknowledge the command." });
+        }, commandTimeoutMs);
+        pendingCommands.set(requestId, { requester: null, resolve, timer });
+        send(device, { ...command, requestId });
+        console.log(`[ESP32] command=${command.type} requestId=${requestId} status=sent`);
+    });
 }
 function removeClient(socket) {
     const info = clients.get(socket);

@@ -17,7 +17,11 @@ const commandTimeoutMs = 3000;
 
 type ClientRole = "esp32" | "control" | "unknown";
 type ClientInfo = { role: ClientRole; device?: string; lastSeen?: number };
-type PendingCommand = { requester: WebSocket; timer: ReturnType<typeof setTimeout> };
+type PendingCommand = {
+    requester: WebSocket | null;
+    resolve?: (result: { ok: boolean; message?: string }) => void;
+    timer: ReturnType<typeof setTimeout>;
+};
 
 const clients = new Map<WebSocket, ClientInfo>();
 const pendingCommands = new Map<string, PendingCommand>();
@@ -41,7 +45,12 @@ function completeCommand(requestId: string, ok: boolean, message?: string) {
     if (!pending) return;
     clearTimeout(pending.timer);
     pendingCommands.delete(requestId);
-    send(pending.requester, { type: "command_result", ok, message });
+    if (pending.resolve) {
+        pending.resolve({ ok, message });
+    }
+    if (pending.requester) {
+        send(pending.requester, { type: "command_result", ok, message });
+    }
 }
 
 function sendCommandToEsp32(command: HardwareCommand, requester: WebSocket) {
@@ -55,6 +64,25 @@ function sendCommandToEsp32(command: HardwareCommand, requester: WebSocket) {
     pendingCommands.set(requestId, { requester, timer });
     send(activeDevice, { ...command, requestId });
     console.log(`[ESP32] command=${command.type} requestId=${requestId} status=sent`);
+}
+
+export function sendCommandToActiveDevice(command: HardwareCommand): Promise<{ ok: boolean; message?: string }> {
+    const device = activeDevice;
+    if (!device || device.readyState !== device.OPEN) {
+        return Promise.resolve({ ok: false, message: "Classroom device is offline." });
+    }
+
+    return new Promise((resolve) => {
+        const requestId = randomUUID();
+        const timer = setTimeout(() => {
+            pendingCommands.delete(requestId);
+            resolve({ ok: false, message: "Classroom device did not acknowledge the command." });
+        }, commandTimeoutMs);
+
+        pendingCommands.set(requestId, { requester: null, resolve, timer });
+        send(device, { ...command, requestId });
+        console.log(`[ESP32] command=${command.type} requestId=${requestId} status=sent`);
+    });
 }
 
 function removeClient(socket: WebSocket) {
