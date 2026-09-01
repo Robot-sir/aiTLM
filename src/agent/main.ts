@@ -1,126 +1,59 @@
-import {
-    type JobContext,
-    ServerOptions,
-    cli,
-    defineAgent,
-    inference,
-    voice,
-    tool,
-} from "@livekit/agents";
-
+import { ServerOptions, cli, defineAgent, inference, voice, tool, } from "@livekit/agents";
 import * as openai from "@livekit/agents-plugin-openai";
 import * as google from "@livekit/agents-plugin-google";
-
 import dotenv from "dotenv";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
-
-import {
-    CLASSROOM_ITEMS,
-    showLearningItem,
-} from "./classroom.js";
-
-import {
-    clearLearningBoard,
-} from "./hardware-client.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const backendDir = path.resolve(__dirname, "../../");
-
-dotenv.config({ path: path.join(backendDir, ".env.local"), override: true });
-dotenv.config({ path: path.join(backendDir, ".env"), override: true });
-dotenv.config({ path: ".env.local", override: true });
-dotenv.config({ path: ".env", override: true });
-
+import { showLearningItem, } from "./classroom.js";
+import { clearLearningBoard, } from "./hardware-client.js";
+dotenv.config({ path: ".env.local" });
+dotenv.config({ path: ".env" });
 process.env.LIVEKIT_URL ??= process.env.NEXT_PUBLIC_LIVEKIT_URL;
-
-
 /* ============================================================
    KITE LLM PROVIDER
    ============================================================ */
-
 function createLLM() {
-    const provider =
-        (process.env.KITE_LLM_PROVIDER || "openrouter")
-            .trim()
-            .toLowerCase();
-
-    if (provider === "gemini" || provider === "google") {
+    const provider = (process.env.KITE_LLM_PROVIDER || "openrouter")
+        .trim()
+        .toLowerCase();
+    if (provider === "gemini") {
         console.log("[KITE] Using Gemini LLM provider");
-
         return new google.LLM({
-            model:
-                process.env.GEMINI_MODEL ||
+            model: process.env.GEMINI_MODEL ||
                 "gemini-2.0-flash",
-
-            apiKey:
-                process.env.GEMINI_API_KEY ||
+            apiKey: process.env.GEMINI_API_KEY ||
                 process.env.GOOGLE_API_KEY,
-
             toolChoice: "auto",
         });
     }
-
     console.log("[KITE] Using OpenRouter LLM provider");
-
     return new openai.LLM({
-        model:
-            process.env.OPENROUTER_MODEL ||
-            "dots-studio/dots-3-note-preview:free",
-
-        apiKey:
-            process.env.OPENROUTER_API_KEY,
-
-        baseURL:
-            "https://openrouter.ai/api/v1",
-
+        model: process.env.OPENROUTER_MODEL ||
+            "openai/gpt-4o-mini",
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: "https://openrouter.ai/api/v1",
         toolChoice: "auto",
-
-        strictToolSchema: false,
+        strictToolSchema: true,
     });
 }
-
-
-
-
-
-/* ============================================================
-   CURRICULUM
-   ============================================================ */
-
-type CurriculumCategory =
-    | "fruits"
-    | "vegetables"
-    | "shapes"
-    | "numbers";
-
-
-const CURRICULUM: Record<
-    CurriculumCategory,
-    string[]
-> = {
+const CURRICULUM = {
     fruits: [
         "pineapple",
         "banana",
         "orange",
         "mango",
     ],
-
     vegetables: [
         "onion",
         "tomato",
         "potato",
         "cucumber",
     ],
-
     shapes: [
         "circle",
         "square",
         "rectangle",
         "triangle",
     ],
-
     numbers: [
         "1",
         "2",
@@ -134,36 +67,16 @@ const CURRICULUM: Record<
         "10",
     ],
 };
-
-
 /* ============================================================
    CATEGORY DISPLAY NAMES
    ============================================================ */
-
-const CATEGORY_NAMES: Record<
-    CurriculumCategory,
-    string
-> = {
+const CATEGORY_NAMES = {
     fruits: "fruits",
     vegetables: "vegetables",
     shapes: "shapes",
     numbers: "numbers",
 };
-
-
-/* ============================================================
-   LESSON STATE
-   ============================================================ */
-
-type LessonState = {
-    active: boolean;
-    category: CurriculumCategory | null;
-    index: number;
-    currentItem: string | null;
-};
-
-
-function createLessonState(): LessonState {
+function createLessonState() {
     return {
         active: false,
         category: null,
@@ -171,48 +84,27 @@ function createLessonState(): LessonState {
         currentItem: null,
     };
 }
-
-
 /* ============================================================
    CATEGORY VALIDATION
    ============================================================ */
-
-function isCurriculumCategory(
-    value: unknown,
-): value is CurriculumCategory {
-
-    return (
-        value === "fruits" ||
+function isCurriculumCategory(value) {
+    return (value === "fruits" ||
         value === "vegetables" ||
         value === "shapes" ||
-        value === "numbers"
-    );
+        value === "numbers");
 }
-
-
 /* ============================================================
    GET CURRENT ITEM
    ============================================================ */
-
-function getCurrentItem(
-    state: LessonState,
-): string | null {
-
-    if (
-        !state.active ||
+function getCurrentItem(state) {
+    if (!state.active ||
         !state.category ||
-        state.index < 0
-    ) {
+        state.index < 0) {
         return null;
     }
-
-    return (
-        CURRICULUM[state.category][state.index] ||
-        null
-    );
+    return (CURRICULUM[state.category][state.index] ||
+        null);
 }
-
-
 /* ============================================================
    HARDWARE ACTIVATION
    ============================================================
@@ -237,92 +129,41 @@ function getCurrentItem(
 
    etc.
    ============================================================ */
-
-async function activateCurrentItem(
-    state: LessonState,
-): Promise<string> {
-
+async function activateCurrentItem(state) {
     const category = state.category;
-
     if (!category) {
-        throw new Error(
-            "Cannot activate classroom item without category.",
-        );
+        throw new Error("Cannot activate classroom item without category.");
     }
-
     const item = getCurrentItem(state);
-
     if (!item) {
-        throw new Error(
-            "Cannot activate classroom item without current item.",
-        );
+        throw new Error("Cannot activate classroom item without current item.");
     }
-
-    console.log(
-        `[KITE LESSON] Activating ${category}/${item}`,
-    );
-
+    console.log(`[KITE LESSON] Activating ${category}/${item}`);
     /*
      * THIS CALL IS DETERMINISTIC.
      *
      * The LLM is not deciding which item to activate.
      */
-    try {
-        const command = await showLearningItem(
-            category,
-            item,
-        );
-
-        state.currentItem = command.item;
-
-        console.log(
-            `[KITE HARDWARE] ACTIVE -> ${command.category}/${command.item}`,
-        );
-
-        return (
-            command.fact ||
-            `This learning item is ${command.item}.`
-        );
-    } catch (err: any) {
-        console.warn(`[KITE HARDWARE] Hardware item activation warning:`, err?.message || err);
-        state.currentItem = item;
-        return `This learning item is ${item}.`;
-    }
+    const command = await showLearningItem(category, item);
+    state.currentItem = command.item;
+    console.log(`[KITE HARDWARE] ACTIVE -> ${command.category}/${command.item}`);
+    return (command.fact ||
+        `This learning item is ${command.item}.`);
 }
-
-
 /* ============================================================
    START LESSON
    ============================================================ */
-
-async function startLesson(
-    state: LessonState,
-    category: CurriculumCategory,
-): Promise<{
-    category: CurriculumCategory;
-    item: string;
-    fact: string;
-    position: number;
-    total: number;
-}> {
-
-    console.log(
-        `[KITE LESSON] Starting ${category}`,
-    );
-
+async function startLesson(state, category) {
+    console.log(`[KITE LESSON] Starting ${category}`);
     /*
      * Always clear the previous physical state first.
      */
     try {
         await clearLearningBoard();
-    } catch (error) {
-        console.warn(
-            "[KITE HARDWARE] Clear before lesson failed:",
-            error,
-        );
     }
-
-
+    catch (error) {
+        console.warn("[KITE HARDWARE] Clear before lesson failed:", error);
+    }
     /*
      * Reset lesson state.
      */
@@ -330,8 +171,6 @@ async function startLesson(
     state.category = category;
     state.index = 0;
     state.currentItem = null;
-
-
     /*
      * IMPORTANT:
      *
@@ -340,14 +179,8 @@ async function startLesson(
      *
      * The LLM cannot skip this step.
      */
-    const fact =
-        await activateCurrentItem(state);
-
-
-    const item =
-        getCurrentItem(state)!;
-
-
+    const fact = await activateCurrentItem(state);
+    const item = getCurrentItem(state);
     return {
         category,
         item,
@@ -356,27 +189,12 @@ async function startLesson(
         total: CURRICULUM[category].length,
     };
 }
-
-
 /* ============================================================
    ADVANCE LESSON
    ============================================================ */
-
-async function advanceLesson(
-    state: LessonState,
-): Promise<{
-    done: boolean;
-    category: CurriculumCategory | null;
-    item: string | null;
-    fact: string | null;
-    position: number;
-    total: number;
-}> {
-
-    if (
-        !state.active ||
-        !state.category
-    ) {
+async function advanceLesson(state) {
+    if (!state.active ||
+        !state.category) {
         return {
             done: true,
             category: null,
@@ -386,42 +204,25 @@ async function advanceLesson(
             total: 0,
         };
     }
-
-
-    const category =
-        state.category;
-
-    const total =
-        CURRICULUM[category].length;
-
-
+    const category = state.category;
+    const total = CURRICULUM[category].length;
     /*
      * Move to next item.
      */
     state.index += 1;
-
-
     /*
      * Lesson complete.
      */
     if (state.index >= total) {
-
-        console.log(
-            `[KITE LESSON] ${category} completed.`,
-        );
-
+        console.log(`[KITE LESSON] ${category} completed.`);
         state.active = false;
         state.currentItem = null;
-
         try {
             await clearLearningBoard();
-        } catch (error) {
-            console.warn(
-                "[KITE HARDWARE] Final clear failed:",
-                error,
-            );
         }
-
+        catch (error) {
+            console.warn("[KITE HARDWARE] Final clear failed:", error);
+        }
         return {
             done: true,
             category,
@@ -431,20 +232,13 @@ async function advanceLesson(
             total,
         };
     }
-
-
     /*
      * Activate the NEXT item.
      *
      * Again, CODE controls this.
      */
-    const fact =
-        await activateCurrentItem(state);
-
-    const item =
-        getCurrentItem(state)!;
-
-
+    const fact = await activateCurrentItem(state);
+    const item = getCurrentItem(state);
     return {
         done: false,
         category,
@@ -454,41 +248,25 @@ async function advanceLesson(
         total,
     };
 }
-
-
 /* ============================================================
    STOP LESSON
    ============================================================ */
-
-async function stopLesson(
-    state: LessonState,
-): Promise<void> {
-
-    console.log(
-        "[KITE LESSON] Stopping lesson.",
-    );
-
+async function stopLesson(state) {
+    console.log("[KITE LESSON] Stopping lesson.");
     state.active = false;
     state.category = null;
     state.index = -1;
     state.currentItem = null;
-
-
     try {
         await clearLearningBoard();
-    } catch (error) {
-        console.warn(
-            "[KITE HARDWARE] Clear failed:",
-            error,
-        );
+    }
+    catch (error) {
+        console.warn("[KITE HARDWARE] Clear failed:", error);
     }
 }
-
-
 /* ============================================================
    TEACHER INSTRUCTIONS
    ============================================================ */
-
 const instructions = `
 You are KITE — a warm, intelligent, cheerful Indian female preschool teacher.
 
@@ -914,100 +692,48 @@ not:
 
 "AI mujhe information de raha hai."
 `;
-
-
 /* ============================================================
    AGENT
    ============================================================ */
-
 export default defineAgent({
-
-    entry: async (ctx: JobContext) => {
-
-        console.log(
-            "[KITE] Starting agent session...",
-        );
-
-
+    entry: async (ctx) => {
+        console.log("[KITE] Starting agent session...");
         /*
          * Lesson state belongs to the application.
          *
          * The LLM does not own this state.
          */
-        const lessonState =
-            createLessonState();
-
-
+        const lessonState = createLessonState();
         /* ====================================================
            SESSION
            ==================================================== */
-
-        const session =
-            new voice.AgentSession({
-
-                stt: new inference.STT({
-                    model: "deepgram/nova-3",
-                    language: "multi",
-                }),
-
-                llm: createLLM(),
-
-                tts: new inference.TTS({
-                    model: "cartesia/sonic-3.5",
-                    voice: "Sameer", 
-                }),
-
-                ttsTextTransforms: [
-                    'filter_markdown',
-                    'filter_emoji',
-                    /* Strip whitespace-only chunks that crash Inworld TTS */
-                    (input: ReadableStream<string>) =>
-                        new ReadableStream<string>({
-                            async start(controller) {
-                                const reader = input.getReader();
-                                try {
-                                    while (true) {
-                                        const { done, value } = await reader.read();
-                                        if (done) break;
-                                        console.log(`[LLM TEXT CHUNK]: ${JSON.stringify(value)}`);
-                                        const cleaned = value.replace(/\n/g, " ").replace(/\s+/g, " ");
-                                        if (cleaned.trim().length > 0) {
-                                            controller.enqueue(cleaned);
-                                        }
-                                    }
-                                    controller.close();
-                                } catch (e) {
-                                    controller.error(e);
-                                }
-                            },
-                        }),
-                ],
-
-                turnHandling: {
-                    turnDetection:
-                        new inference.TurnDetector(),
-                },
-            });
-
-
+        const session = new voice.AgentSession({
+            stt: new inference.STT({
+                model: "deepgram/nova-3",
+                language: "multi",
+            }),
+            llm: createLLM(),
+            tts: new inference.TTS({
+                model: "inworld/inworld-tts-2",
+                voice: process.env.KITE_TTS_VOICE ||
+                    "Priya",
+                language: "hi",
+            }),
+            turnHandling: {
+                turnDetection: new inference.TurnDetector(),
+            },
+        });
         /* ====================================================
            START SESSION
            ==================================================== */
-
         await session.start({
-
             agent: voice.Agent.create({
-
                 instructions,
-
                 tools: {
-
                     /* ========================================
                        START CURRICULUM LESSON
                        ======================================== */
-
                     startCurriculumLesson: tool({
-
                         description: `
 MANDATORY LESSON START ACTION.
 
@@ -1023,16 +749,11 @@ The lesson engine will choose it.
 
 Do not call this for stories, rhymes or general topics.
                         `.trim(),
-
                         parameters: {
-
                             type: "object",
-
                             properties: {
-
                                 category: {
                                     type: "string",
-
                                     enum: [
                                         "fruits",
                                         "vegetables",
@@ -1040,39 +761,17 @@ Do not call this for stories, rhymes or general topics.
                                         "numbers",
                                     ],
                                 },
-
                             },
-
                             required: [
                                 "category",
                             ],
-
                             additionalProperties: false,
                         },
-
-
-                        execute: async ({
-                            category,
-                        }: {
-                            category: CurriculumCategory;
-                        }) => {
-
-                            console.log(
-                                `[KITE TOOL] startCurriculumLesson(${category})`,
-                            );
-
-
-                            if (
-                                !isCurriculumCategory(
-                                    category,
-                                )
-                            ) {
-                                throw new Error(
-                                    `Unsupported curriculum category: ${category}`,
-                                );
+                        execute: async ({ category, }) => {
+                            console.log(`[KITE TOOL] startCurriculumLesson(${category})`);
+                            if (!isCurriculumCategory(category)) {
+                                throw new Error(`Unsupported curriculum category: ${category}`);
                             }
-
-
                             /*
                              * HARD GUARANTEE:
                              *
@@ -1083,46 +782,22 @@ Do not call this for stories, rhymes or general topics.
                              * -> selects item #1
                              * -> calls showLearningItem()
                              */
-                            const result =
-                                await startLesson(
-                                    lessonState,
-                                    category,
-                                );
-
-
+                            const result = await startLesson(lessonState, category);
                             return JSON.stringify({
-
-                                type:
-                                    "lesson_started",
-
-                                category:
-                                    result.category,
-
-                                item:
-                                    result.item,
-
-                                fact:
-                                    result.fact,
-
-                                position:
-                                    result.position,
-
-                                total:
-                                    result.total,
-
-                                instruction:
-                                    "Teach ONLY this returned item.",
+                                type: "lesson_started",
+                                category: result.category,
+                                item: result.item,
+                                fact: result.fact,
+                                position: result.position,
+                                total: result.total,
+                                instruction: "Teach ONLY this returned item.",
                             });
                         },
                     }),
-
-
                     /* ========================================
                        ADVANCE CURRICULUM LESSON
                        ======================================== */
-
                     advanceCurriculumLesson: tool({
-
                         description: `
 ADVANCE THE CURRENT CURRICULUM LESSON.
 
@@ -1136,24 +811,13 @@ NEVER choose the next item yourself.
 
 Do not use this during stories or unrelated conversation.
                         `.trim(),
-
                         parameters: {
-
                             type: "object",
-
                             properties: {},
-
                             additionalProperties: false,
                         },
-
-
                         execute: async () => {
-
-                            console.log(
-                                "[KITE TOOL] advanceCurriculumLesson()",
-                            );
-
-
+                            console.log("[KITE TOOL] advanceCurriculumLesson()");
                             /*
                              * HARD GUARANTEE:
                              *
@@ -1163,49 +827,26 @@ Do not use this during stories or unrelated conversation.
                              *
                              * Code calls showLearningItem().
                              */
-                            const result =
-                                await advanceLesson(
-                                    lessonState,
-                                );
-
-
+                            const result = await advanceLesson(lessonState);
                             return JSON.stringify({
-
-                                type:
-                                    result.done
-                                        ? "lesson_completed"
-                                        : "lesson_advanced",
-
-                                category:
-                                    result.category,
-
-                                item:
-                                    result.item,
-
-                                fact:
-                                    result.fact,
-
-                                position:
-                                    result.position,
-
-                                total:
-                                    result.total,
-
-                                instruction:
-                                    result.done
-                                        ? "Celebrate completion and ask what the child wants to learn next."
-                                        : "Teach ONLY the returned item.",
+                                type: result.done
+                                    ? "lesson_completed"
+                                    : "lesson_advanced",
+                                category: result.category,
+                                item: result.item,
+                                fact: result.fact,
+                                position: result.position,
+                                total: result.total,
+                                instruction: result.done
+                                    ? "Celebrate completion and ask what the child wants to learn next."
+                                    : "Teach ONLY the returned item.",
                             });
                         },
                     }),
-
-
                     /* ========================================
                        CLEAR CLASSROOM
                        ======================================== */
-
                     clearClassroom: tool({
-
                         description: `
 CLEAR THE PHYSICAL CLASSROOM.
 
@@ -1214,59 +855,32 @@ different subject such as a story or rhyme.
 
 Do not mention technical details to the child.
                         `.trim(),
-
                         parameters: {
-
                             type: "object",
-
                             properties: {},
-
                             additionalProperties: false,
                         },
-
-
                         execute: async () => {
-
-                            console.log(
-                                "[KITE TOOL] clearClassroom()",
-                            );
-
-
-                            await stopLesson(
-                                lessonState,
-                            );
-
-
+                            console.log("[KITE TOOL] clearClassroom()");
+                            await stopLesson(lessonState);
                             return JSON.stringify({
-
-                                type:
-                                    "classroom_cleared",
-
-                                status:
-                                    "cleared",
+                                type: "classroom_cleared",
+                                status: "cleared",
                             });
                         },
                     }),
                 },
             }),
-
             room: ctx.room,
         });
-
-
         /* ====================================================
            CONNECT
            ==================================================== */
-
         await ctx.connect();
-
-
         /* ====================================================
            INITIAL GREETING
            ==================================================== */
-
         await session.generateReply({
-
             instructions: `
 
 Greet the child exactly in this style.
@@ -1293,20 +907,10 @@ Do NOT activate anything yet.
         });
     },
 });
-
-
 /* ============================================================
    SERVER
    ============================================================ */
-
-cli.runApp(
-
-    new ServerOptions({
-
-        agent:
-            fileURLToPath(import.meta.url),
-
-        agentName:
-            "kite-agent",
-    }),
-);
+cli.runApp(new ServerOptions({
+    agent: fileURLToPath(import.meta.url),
+    agentName: "kite-agent",
+}));
