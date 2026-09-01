@@ -12,6 +12,7 @@ import * as openai from "@livekit/agents-plugin-openai";
 import * as google from "@livekit/agents-plugin-google";
 
 import dotenv from "dotenv";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -23,8 +24,14 @@ import {
     clearLearningBoard,
 } from "./hardware-client.js";
 
-dotenv.config({ path: ".env.local" });
-dotenv.config({ path: ".env" });
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const backendDir = path.resolve(__dirname, "../../");
+
+dotenv.config({ path: path.join(backendDir, ".env.local"), override: true });
+dotenv.config({ path: path.join(backendDir, ".env"), override: true });
+dotenv.config({ path: ".env.local", override: true });
+dotenv.config({ path: ".env", override: true });
 
 process.env.LIVEKIT_URL ??= process.env.NEXT_PUBLIC_LIVEKIT_URL;
 
@@ -39,7 +46,7 @@ function createLLM() {
             .trim()
             .toLowerCase();
 
-    if (provider === "gemini") {
+    if (provider === "gemini" || provider === "google") {
         console.log("[KITE] Using Gemini LLM provider");
 
         return new google.LLM({
@@ -60,7 +67,7 @@ function createLLM() {
     return new openai.LLM({
         model:
             process.env.OPENROUTER_MODEL ||
-            "openai/gpt-4o-mini",
+            "dots-studio/dots-3-note-preview:free",
 
         apiKey:
             process.env.OPENROUTER_API_KEY,
@@ -70,35 +77,12 @@ function createLLM() {
 
         toolChoice: "auto",
 
-        strictToolSchema: true,
+        strictToolSchema: false,
     });
 }
 
 
-/* ============================================================
-   KITE TTS PROVIDER
-   ============================================================ */
 
-function createTTS() {
-    const provider = (process.env.KITE_TTS_PROVIDER || "openai").trim().toLowerCase();
-
-    if (provider === "openai" && (process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY)) {
-        console.log("[KITE] Using OpenAI TTS provider");
-        return new openai.TTS({
-            model: (process.env.OPENAI_TTS_MODEL as any) || "tts-1",
-            voice: (process.env.KITE_TTS_VOICE as any) || "nova",
-            apiKey: process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY,
-        });
-    }
-
-    const ttsModel = process.env.KITE_TTS_MODEL || "cartesia/sonic";
-    console.log(`[KITE] Using LiveKit Cloud Inference TTS model: ${ttsModel}`);
-
-    return new inference.TTS({
-        model: ttsModel as any,
-        voice: process.env.KITE_TTS_VOICE,
-    });
-}
 
 
 /* ============================================================
@@ -283,21 +267,27 @@ async function activateCurrentItem(
      *
      * The LLM is not deciding which item to activate.
      */
-    const command = await showLearningItem(
-        category,
-        item,
-    );
+    try {
+        const command = await showLearningItem(
+            category,
+            item,
+        );
 
-    state.currentItem = command.item;
+        state.currentItem = command.item;
 
-    console.log(
-        `[KITE HARDWARE] ACTIVE -> ${command.category}/${command.item}`,
-    );
+        console.log(
+            `[KITE HARDWARE] ACTIVE -> ${command.category}/${command.item}`,
+        );
 
-    return (
-        command.fact ||
-        `This learning item is ${command.item}.`
-    );
+        return (
+            command.fact ||
+            `This learning item is ${command.item}.`
+        );
+    } catch (err: any) {
+        console.warn(`[KITE HARDWARE] Hardware item activation warning:`, err?.message || err);
+        state.currentItem = item;
+        return `This learning item is ${item}.`;
+    }
 }
 
 
@@ -962,7 +952,36 @@ export default defineAgent({
 
                 llm: createLLM(),
 
-                tts: createTTS(),
+                tts: new inference.TTS({
+                    model: "cartesia/sonic-3.5",
+                    voice: "Sameer", 
+                }),
+
+                ttsTextTransforms: [
+                    'filter_markdown',
+                    'filter_emoji',
+                    /* Strip whitespace-only chunks that crash Inworld TTS */
+                    (input: ReadableStream<string>) =>
+                        new ReadableStream<string>({
+                            async start(controller) {
+                                const reader = input.getReader();
+                                try {
+                                    while (true) {
+                                        const { done, value } = await reader.read();
+                                        if (done) break;
+                                        console.log(`[LLM TEXT CHUNK]: ${JSON.stringify(value)}`);
+                                        const cleaned = value.replace(/\n/g, " ").replace(/\s+/g, " ");
+                                        if (cleaned.trim().length > 0) {
+                                            controller.enqueue(cleaned);
+                                        }
+                                    }
+                                    controller.close();
+                                } catch (e) {
+                                    controller.error(e);
+                                }
+                            },
+                        }),
+                ],
 
                 turnHandling: {
                     turnDetection:
