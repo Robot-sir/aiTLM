@@ -28,7 +28,11 @@ const pendingCommands = new Map<string, PendingCommand>();
 let activeDevice: WebSocket | null = null;
 
 function send(socket: WebSocket, message: unknown) {
-    if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
+    if (socket.readyState === 1 /* WebSocket.OPEN */) {
+        socket.send(JSON.stringify(message));
+    } else {
+        console.warn(`[ESP32] Cannot send — socket readyState=${socket.readyState} (expected OPEN=1)`);
+    }
 }
 
 function isAuthorized(token: unknown) {
@@ -68,7 +72,13 @@ function sendCommandToEsp32(command: HardwareCommand, requester: WebSocket) {
 
 export function sendCommandToActiveDevice(command: HardwareCommand): Promise<{ ok: boolean; message?: string }> {
     const device = activeDevice;
-    if (!device || device.readyState !== device.OPEN) {
+
+    if (!device || device.readyState !== 1 /* OPEN */) {
+        const reason = !device
+            ? "activeDevice is null — ESP32 may not have authenticated (check ESP32_DEVICE_TOKEN in env)"
+            : `activeDevice socket readyState=${device.readyState} (not OPEN=1)`;
+        console.warn(`[KITE HARDWARE] Cannot send command: ${reason}`);
+        console.warn(`[KITE HARDWARE] Current bridge state: ${getBridgeDebugInfo()}`);
         return Promise.resolve({ ok: false, message: "Classroom device is offline." });
     }
 
@@ -76,6 +86,7 @@ export function sendCommandToActiveDevice(command: HardwareCommand): Promise<{ o
         const requestId = randomUUID();
         const timer = setTimeout(() => {
             pendingCommands.delete(requestId);
+            console.warn(`[KITE HARDWARE] Command timed out after ${commandTimeoutMs}ms: type=${command.type} requestId=${requestId}`);
             resolve({ ok: false, message: "Classroom device did not acknowledge the command." });
         }, commandTimeoutMs);
 
@@ -92,6 +103,27 @@ function removeClient(socket: WebSocket) {
         console.log(`[ESP32] Device offline device=${info?.device || "unknown"}`);
     }
     clients.delete(socket);
+}
+
+function getBridgeDebugInfo(): string {
+    const parts: string[] = [];
+    parts.push(`clients=${clients.size}`);
+    parts.push(`pendingCommands=${pendingCommands.size}`);
+
+    if (activeDevice) {
+        const info = clients.get(activeDevice);
+        parts.push(`activeDevice=device=${info?.device || "unknown"} readyState=${activeDevice.readyState}`);
+    } else {
+        parts.push(`activeDevice=null`);
+    }
+
+    if (!configuredToken) {
+        parts.push(`WARNING: ESP32_DEVICE_TOKEN not set — auth is bypassed`);
+    } else {
+        parts.push(`ESP32_DEVICE_TOKEN is set (length=${configuredToken.length})`);
+    }
+
+    return parts.join(", ");
 }
 
 export function startBridge(listenPort = port, httpServer?: Server): WebSocketServer {
@@ -188,10 +220,17 @@ export function startBridge(listenPort = port, httpServer?: Server): WebSocketSe
         }
     }, 10000);
 
-    if (!configuredToken) console.warn("[ESP32] ESP32_DEVICE_TOKEN is not configured; bridge authentication is disabled for development.");
-    
+    // ── Startup diagnostics ──────────────────────────────────────
+    if (!configuredToken) {
+        console.warn("[ESP32] ⚠️  ESP32_DEVICE_TOKEN is NOT SET — bridge authentication is BYPASSED.");
+        console.warn("[ESP32]    Any device can connect. Set ESP32_DEVICE_TOKEN in your Render env for production.");
+    } else {
+        console.log(`[ESP32] ESP32_DEVICE_TOKEN is set (length=${configuredToken.length}).`);
+        console.log(`[ESP32] ESP32 must send matching token to authenticate.`);
+    }
+
     if (httpServer) {
-        console.log(`[CLASSROOM] WebSocket bridge attached to main HTTP server`);
+        console.log(`[CLASSROOM] WebSocket bridge attached to main HTTP server (same port as Express).`);
     } else {
         console.log(`[CLASSROOM] WebSocket bridge listening on ws://0.0.0.0:${listenPort}`);
     }

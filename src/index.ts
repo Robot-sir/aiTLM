@@ -1,4 +1,11 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+
+/*
+ * Load .env.local first (local overrides, e.g. OPENCODE_API_KEY),
+ * then fall back to .env for everything else.
+ */
+dotenv.config({ path: ".env.local" });
+dotenv.config();
 
 import express from "express";
 import cors from "cors";

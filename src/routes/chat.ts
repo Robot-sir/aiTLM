@@ -307,11 +307,12 @@ DO NOT ADD EXTRA CONTENT.
 
 router.post("/", async (req: Request, res: Response) => {
     try {
-        const apiKey = process.env.OPENROUTER_API_KEY;
+        const apiKey = process.env.OPENCODE_API_KEY ||
+            process.env.OPENROUTER_API_KEY;
 
         if (!apiKey) {
             res.status(503).json({
-                error: "Add OPENROUTER_API_KEY to backend .env to enable chat.",
+                error: "Add OPENCODE_API_KEY to backend .env to enable chat.",
             });
             return;
         }
@@ -347,25 +348,16 @@ router.post("/", async (req: Request, res: Response) => {
             return;
         }
 
-        const appUrl =
-            process.env.FRONTEND_URL ||
-            process.env.NEXT_PUBLIC_APP_URL ||
-            "http://localhost:5173";
-
-        const model =
-            process.env.OPENROUTER_MODEL ||
-            "stealth/ox-alpha";
+        const model = "mimo-v2.5-free";
 
         const response = await fetch(
-            "https://openrouter.ai/api/v1/chat/completions",
+            "https://opencode.ai/zen/v1/chat/completions",
             {
                 method: "POST",
 
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${apiKey}`,
-                    "HTTP-Referer": appUrl,
-                    "X-Title": "Kite Teacher Learning Lab",
                 },
 
                 body: JSON.stringify({
@@ -399,6 +391,11 @@ router.post("/", async (req: Request, res: Response) => {
                      * We don't want a long creative response.
                      */
                     stream: false,
+
+                    /*
+                     * OpenCode accepts OpenAI-style extra body params.
+                     */
+                    seed: 42,
                 }),
 
                 signal: AbortSignal.timeout(15000),
@@ -417,12 +414,12 @@ router.post("/", async (req: Request, res: Response) => {
         };
 
         if (!response.ok) {
-            console.error("[OPENROUTER ERROR]", data);
+            console.error("[OPENCODE API ERROR]", data);
 
             res.status(response.status).json({
                 error:
                     data.error?.message ||
-                    "OpenRouter request failed.",
+                    "OpenCode API request failed.",
             });
 
             return;

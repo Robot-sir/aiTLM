@@ -1,6 +1,5 @@
 import { ServerOptions, cli, defineAgent, inference, voice, tool, } from "@livekit/agents";
 import * as openai from "@livekit/agents-plugin-openai";
-import * as google from "@livekit/agents-plugin-google";
 import dotenv from "dotenv";
 import { fileURLToPath } from "node:url";
 import { showLearningItem, } from "./classroom.js";
@@ -12,27 +11,24 @@ process.env.LIVEKIT_URL ??= process.env.NEXT_PUBLIC_LIVEKIT_URL;
    KITE LLM PROVIDER
    ============================================================ */
 function createLLM() {
-    const provider = (process.env.KITE_LLM_PROVIDER || "openrouter")
-        .trim()
-        .toLowerCase();
-    if (provider === "gemini") {
-        console.log("[KITE] Using Gemini LLM provider");
-        return new google.LLM({
-            model: process.env.GEMINI_MODEL ||
-                "gemini-2.0-flash",
-            apiKey: process.env.GEMINI_API_KEY ||
-                process.env.GOOGLE_API_KEY,
-            toolChoice: "auto",
-        });
-    }
-    console.log("[KITE] Using OpenRouter LLM provider");
+    /*
+     * OpenCode Go/Zen — OpenAI-compatible endpoint.
+     *
+     * The OpenAI client appends /chat/completions itself,
+     * so baseURL must NOT include that suffix.
+     */
+    console.log("[KITE] Using OpenCode LLM provider (mimo-v2.5-free)");
     return new openai.LLM({
-        model: process.env.OPENROUTER_MODEL ||
-            "openai/gpt-4o-mini",
-        apiKey: process.env.OPENROUTER_API_KEY,
-        baseURL: "https://openrouter.ai/api/v1",
+        model: "mimo-v2.5-free",
+        apiKey: process.env.OPENCODE_API_KEY ||
+            process.env.OPENROUTER_API_KEY,
+        baseURL: "https://opencode.ai/zen/v1",
         toolChoice: "auto",
-        strictToolSchema: true,
+        /*
+         * OpenCode's OpenAI-compatible API does not support
+         * OpenAI's strict tool-schema flag.
+         */
+        strictToolSchema: false,
     });
 }
 const CURRICULUM = {
@@ -343,6 +339,7 @@ algorithm
 ESP32
 LED
 LiveKit
+OpenCode
 OpenRouter
 Gemini
 hardware
@@ -722,6 +719,17 @@ export default defineAgent({
             turnHandling: {
                 turnDetection: new inference.TurnDetector(),
             },
+            /*
+             * The free OpenCode tier rate-limits hard, so be patient
+             * with retries instead of hammering the API.
+             */
+            connOptions: {
+                llmConnOptions: {
+                    maxRetry: 5,
+                    retryIntervalMs: 5000,
+                    timeoutMs: 20000,
+                },
+            },
         });
         /* ====================================================
            START SESSION
@@ -880,31 +888,19 @@ Do not mention technical details to the child.
         /* ====================================================
            INITIAL GREETING
            ==================================================== */
-        await session.generateReply({
-            instructions: `
-
-Greet the child exactly in this style.
-
-Say:
-
-"Hello! Main Kite hoon.
+        /*
+         * Static greeting via say() — no LLM call needed,
+         * which saves one request per session on the free tier.
+         */
+        await session.say(`
+Hello! Main Kite hoon.
 
 Aaj hum saath mein kuch mazedaar aur naya seekhenge.
 
 Aap batayiye, aaj kya seekhna hai?
 
-Fruits, vegetables, colours, shapes, numbers, story ya rhyme?"
-
-Then STOP.
-
-WAIT for the child.
-
-Do NOT start a lesson yet.
-
-Do NOT activate anything yet.
-
-`,
-        });
+Fruits, vegetables, colours, shapes, numbers, story ya rhyme?
+        `.trim());
     },
 });
 /* ============================================================

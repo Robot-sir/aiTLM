@@ -38,9 +38,10 @@ router.post("/test", async (req: Request, res: Response) => {
 
         await activateLearningItem(body.category as ClassroomCategory, body.item as string);
         res.json({ ok: true, type: "active_item", category: body.category, item: body.item });
-    } catch (error) {
-        console.error("[CLASSROOM TEST]", error);
-        res.status(503).json({ error: "Classroom device is unavailable." });
+    } catch (error: any) {
+        const message = error?.message || "Classroom device is unavailable.";
+        console.error(`[CLASSROOM TEST] ${message}`);
+        res.status(503).json({ ok: false, error: message });
     }
 });
 
@@ -55,9 +56,10 @@ router.post("/activate", async (req: Request, res: Response) => {
 
         await activateLearningItem(body.category as ClassroomCategory, body.item as string);
         res.json({ ok: true, type: "active_item", category: body.category, item: body.item });
-    } catch (error) {
-        console.error("[CLASSROOM ACTIVATE]", error);
-        res.status(503).json({ error: "Classroom device is unavailable." });
+    } catch (error: any) {
+        const message = error?.message || "Classroom device is unavailable.";
+        console.error(`[CLASSROOM ACTIVATE] ${message}`);
+        res.status(503).json({ ok: false, error: message });
     }
 });
 
@@ -66,9 +68,10 @@ router.post("/clear", async (_req: Request, res: Response) => {
     try {
         await clearLearningBoard();
         res.json({ ok: true, type: "clear" });
-    } catch (error) {
-        console.error("[CLASSROOM CLEAR]", error);
-        res.status(503).json({ error: "Classroom device is unavailable." });
+    } catch (error: any) {
+        const message = error?.message || "Classroom device is unavailable.";
+        console.error(`[CLASSROOM CLEAR] ${message}`);
+        res.status(503).json({ ok: false, error: message });
     }
 });
 
